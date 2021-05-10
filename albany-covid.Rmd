@@ -1,0 +1,501 @@
+
+```{r}
+options(stringsAsFactors = FALSE)
+Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
+```
+
+```{r}
+#rm(data,data_non_solidarity,data_solidarity,emDict_raw)
+rm(list = ls()) 
+#install.packages("slam")
+library(slam)
+library(textcat)
+#library(cldr)
+library(entropart)
+library(boot)
+library(vegan)
+library(simboot)
+#update.packages()
+library(tidyverse)
+#library(tokenizers)
+library(mgcv)
+library(twitteR)
+library(plyr)
+library(dplyr)
+library(ROAuth)
+library(stringr)
+library(ggplot2)
+library(httr)
+library(wordcloud)
+library(stringi)
+#library(sentiment)
+library(SnowballC)
+library(tm)
+library(RColorBrewer)
+```
+
+
+```{r}
+data_covid_filtered <- read.csv("R_COVID_UA_cleaned_responses_only.csv")
+```
+
+```{r}
+data_covid_filtered
+```
+
+```{r}
+head(data_covid_filtered,10)
+```
+
+
+
+```{r}
+new_data_covid_en <- data_covid_filtered %>% 
+  mutate(text = iconv(text, from = "latin1", to = "ascii", sub = "byte"))
+```
+
+```{r}
+corpus_full <- new_data_covid_en$text
+
+
+corpus_full <- Corpus(VectorSource(corpus_full))
+##convert text to lowercase
+corpus_full <- tm_map(corpus_full,tolower)
+#inspect(corpus[1:5])
+##remove punctuations from text
+corpus_full <- tm_map(corpus_full,removePunctuation)
+##remove numbers from text
+corpus_full <- tm_map(corpus_full,removeNumbers)
+#inspect(corpus[1:5])
+##remove stopwords from french language 
+##corpus_USA_en_emoji <- tm_map(corpus_USA_en_emoji,removeWords,stopwords("en"))
+##remove url from text
+removeURL <- function(x) gsub("http[[:alnum:]]*",'',x)
+removeLine <- function(x) gsub("[\r\n]",'',x)
+cleaned_corpus_full <- tm_map(corpus_full,content_transformer(removeURL))
+cleaned_corpus_full <- tm_map(corpus_full,content_transformer(removeLine))
+#inspect(cleaned_corpus[1:5])
+##remove emoticons
+removeEmoticons <- function(x) gsub("(?::|;|=)(?:-)?(?:\\)|\\(|D|P)",'',x)
+cleaned_corpus_full <- tm_map(cleaned_corpus_full,content_transformer(removeEmoticons))
+   
+##remove white space
+cleaned_corpus_full <- tm_map(cleaned_corpus_full,stripWhitespace)
+###
+cleaned_corpus_full <- tm_map(cleaned_corpus_full,removeWords,c('paris'))
+cleaned_corpus_full <- tm_map(cleaned_corpus_full,stripWhitespace)
+##average word length before stemming
+# split words
+words_list = strsplit(cleaned_corpus_full$content," ")
+wsize_per_tweet = sapply(words_list, function(x) mean(nchar(x)))
+avg_word_len = mean(wsize_per_tweet,na.rm=TRUE)
+avg_word_len
+##Stemming
+cleaned_corpus_full <- tm_map(cleaned_corpus_full,stemDocument)
+cleaned_corpus_full <- tm_map(cleaned_corpus_full,stripWhitespace)
+##avg tweet length
+avg_tweet_len <- mean(sapply(cleaned_corpus_full,function(x)length(unlist(gregexpr("\\S+",x)))+1))
+avg_tweet_len
+
+#inspect(cleaned_corpus_en_emoji[1:25])
+```
+```{r}
+
+```
+
+```{r}
+tdm <- TermDocumentMatrix(cleaned_corpus_full)
+#tdm <- as.matrix(tdm)
+#print(tdm[1:10,1:20])
+#tdm
+#tdm <- as.matrix(tdm)
+freqSum_en <- slam::row_sums(tdm, na.rm = T)
+#apply(tdm, 1, sum)
+#freqSum_USA_en <- rowSums(tdm)
+#freqSum_France_fr 
+H=Shannon(freqSum_en)/log(2)
+H
+```
+
+```{r}
+library("iNEXT")
+var<-ChaoShannon(freqSum_en, datatype = "abundance", conf = 0.95)/log(2)
+```
+
+```{r}
+var
+```
+
+
+##Full 
+
+```{r}
+library(tm)
+#Create a vector containing only the text
+text <- new_data_covid_en$text
+
+# Create a corpus  
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+
+```
+
+```{r}
+dtm.new<-removeSparseTerms(dtm, sparse=0.99)
+```
+
+```{r}
+
+matrix <- as.matrix(dtm.new) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+df <- data.frame(word = names(words),freq=words)
+```
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+
+set.seed(1234) # for reproducibility 
+wordcloud(words = df$word, freq = df$freq, min.freq = 1,           max.words=200, scale=c(2,.5), random.order=FALSE, rot.per=0.35,            colors=brewer.pal(8, "Dark2"))
+```
+##I/WE/Neither
+
+
+```{r}
+I_full <-  new_data_covid_en%>%dplyr::filter(str_detect(text,regex('I\\s+ |Me\\s+|Mine\\s+|My\\s+|i\\s+|me\\s+|mine\\s+|my\\s+',ignore_case = T)))
+We_full <-  new_data_covid_en%>%dplyr::filter(str_detect(text,regex('We\\s+|Our\\s+|Ours\\s+|Us\\s+|we\\s+|our\\s+|ours\\s+|us\\s+',ignore_case = T)))
+Neither_full <-  new_data_covid_en%>%dplyr::filter(!str_detect(text,regex('I\\s+|Me\\s+|Mine\\s+|My\\s+|i\\s+|me\\s+|mine\\s+|my\\s+',ignore_case = T)))%>%dplyr::filter(!str_detect(text,regex('We\\s+|Our\\s+|Ours\\s+|Us\\s+|we\\s+|our\\s+|ours\\s+|us\\s+',ignore_case = T)))
+```
+
+
+```{r}
+ ##Remove emoji
+corpus_en_I_emoji <- iconv(I_full$text, "latin1", "ASCII", sub="")
+### remove retweet entities
+corpus_en_I_emoji <-  gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", corpus_en_I_emoji) 
+corpus_en_I_emoji <- Corpus(VectorSource(corpus_en_I_emoji))
+##convert text to lowercase
+corpus_en_I_emoji <- tm_map(corpus_en_I_emoji,tolower)
+#inspect(corpus[1:5])
+##remove punctuations from text
+corpus_en_I_emoji <- tm_map(corpus_en_I_emoji,removePunctuation)
+##remove numbers from text
+corpus_en_I_emoji <- tm_map(corpus_en_I_emoji,removeNumbers)
+#inspect(corpus[1:5])
+##remove stopwords from french language 
+##corpus_USA_en_emoji <- tm_map(corpus_USA_en_emoji,removeWords,stopwords("en"))
+##remove url from text
+removeURL <- function(x) gsub("http[[:alnum:]]*",'',x)
+cleaned_corpus_en_I_emoji <- tm_map(corpus_en_I_emoji,content_transformer(removeURL))
+#inspect(cleaned_corpus[1:5])
+##remove emoticons
+removeEmoticons <- function(x) gsub("(?::|;|=)(?:-)?(?:\\)|\\(|D|P)",'',x)
+cleaned_corpus_en_I_emoji <- tm_map(cleaned_corpus_en_I_emoji,content_transformer(removeEmoticons))
+   
+##remove white space
+cleaned_corpus_en_I_emoji <- tm_map(cleaned_corpus_en_I_emoji,stripWhitespace)
+###
+cleaned_corpus_en_I_emoji <- tm_map(cleaned_corpus_en_I_emoji,removeWords,c('paris'))
+cleaned_corpus_en_I_emoji <- tm_map(cleaned_corpus_en_I_emoji,stripWhitespace)
+##average word length before stemming
+# split words
+words_list = strsplit(cleaned_corpus_en_I_emoji$content," ")
+wsize_per_tweet = sapply(words_list, function(x) mean(nchar(x)))
+avg_word_len = mean(wsize_per_tweet,na.rm=TRUE)
+avg_word_len
+##Stemming
+cleaned_corpus_en_I_emoji <- tm_map(cleaned_corpus_en_I_emoji,stemDocument)
+cleaned_corpus_en_I_emoji <- tm_map(cleaned_corpus_en_I_emoji,stripWhitespace)
+##avg tweet length
+avg_tweet_len <- mean(sapply(cleaned_corpus_en_I_emoji,function(x)length(unlist(gregexpr(" ",x)))+1))
+avg_tweet_len
+length(cleaned_corpus_en_I_emoji)
+#inspect(cleaned_corpus_en_emoji[1:25])
+```
+
+```{r}
+tdm <- TermDocumentMatrix(cleaned_corpus_en_I_emoji)
+#tdm <- as.matrix(tdm)
+#print(tdm[1:10,1:20])
+#tdm
+#tdm <- as.matrix(tdm)
+freqSum_en_I_emoji <- slam::row_sums(tdm, na.rm = T)
+#apply(tdm, 1, sum)
+#freqSum_USA_en <- rowSums(tdm)
+#freqSum_France_fr 
+H=Shannon(freqSum_en_I_emoji)/log(2)
+H
+```
+
+```{r}
+library("iNEXT")
+var<-ChaoShannon(freqSum_en_I_emoji, datatype = "abundance", conf = 0.95)/log(2)
+```
+
+```{r}
+var
+```
+
+##We Tweets
+
+```{r}
+ ##Remove emoji
+corpus_en_We_emoji <- iconv(We_full$text, "latin1", "ASCII", sub="")
+### remove retweet entities
+corpus_en_We_emoji <-  gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", corpus_en_We_emoji) 
+corpus_en_We_emoji <- Corpus(VectorSource(corpus_en_We_emoji))
+##convert text to lowercase
+corpus_en_We_emoji <- tm_map(corpus_en_We_emoji,tolower)
+#inspect(corpus[1:5])
+##remove punctuations from text
+corpus_en_We_emoji <- tm_map(corpus_en_We_emoji,removePunctuation)
+##remove numbers from text
+corpus_en_We_emoji <- tm_map(corpus_en_We_emoji,removeNumbers)
+#inspect(corpus[1:5])
+##remove stopwords from french language 
+##corpus_USA_en_emoji <- tm_map(corpus_USA_en_emoji,removeWords,stopwords("en"))
+##remove url from text
+removeURL <- function(x) gsub("http[[:alnum:]]*",'',x)
+cleaned_corpus_en_We_emoji <- tm_map(corpus_en_We_emoji,content_transformer(removeURL))
+#inspect(cleaned_corpus[1:5])
+##remove emoticons
+removeEmoticons <- function(x) gsub("(?::|;|=)(?:-)?(?:\\)|\\(|D|P)",'',x)
+cleaned_corpus_en_We_emoji <- tm_map(cleaned_corpus_en_We_emoji,content_transformer(removeEmoticons))
+   
+##remove white space
+cleaned_corpus_en_We_emoji <- tm_map(cleaned_corpus_en_We_emoji,stripWhitespace)
+###
+cleaned_corpus_en_We_emoji <- tm_map(cleaned_corpus_en_We_emoji,removeWords,c('paris'))
+cleaned_corpus_en_We_emoji <- tm_map(cleaned_corpus_en_We_emoji,stripWhitespace)
+##average word length before stemming
+# split words
+words_list = strsplit(cleaned_corpus_en_We_emoji$content," ")
+wsize_per_tweet = sapply(words_list, function(x) mean(nchar(x)))
+avg_word_len = mean(wsize_per_tweet,na.rm=TRUE)
+avg_word_len
+##Stemming
+cleaned_corpus_en_We_emoji <- tm_map(cleaned_corpus_en_We_emoji,stemDocument)
+cleaned_corpus_en_We_emoji <- tm_map(cleaned_corpus_en_We_emoji,stripWhitespace)
+##avg tweet length
+avg_tweet_len <- mean(sapply(cleaned_corpus_en_We_emoji,function(x)length(unlist(gregexpr(" ",x)))+1))
+avg_tweet_len
+length(cleaned_corpus_en_We_emoji)
+#inspect(cleaned_corpus_en_emoji[1:25])
+```
+
+```{r}
+tdm <- TermDocumentMatrix(cleaned_corpus_en_We_emoji)
+#tdm <- as.matrix(tdm)
+#print(tdm[1:10,1:20])
+#tdm
+#tdm <- as.matrix(tdm)
+freqSum_en_We_emoji <- slam::row_sums(tdm, na.rm = T)
+#apply(tdm, 1, sum)
+#freqSum_USA_en <- rowSums(tdm)
+#freqSum_France_fr 
+H=Shannon(freqSum_en_We_emoji)/log(2)
+H
+```
+
+```{r}
+library("iNEXT")
+var<-ChaoShannon(freqSum_en_We_emoji, datatype = "abundance", conf = 0.95)/log(2)
+```
+
+```{r}
+var
+```
+
+##Neither Tweets
+
+
+```{r}
+ ##Remove emoji
+corpus_en_Neither_emoji <- iconv(Neither_full$text, "latin1", "ASCII", sub="")
+### remove retweet entities
+corpus_en_Neither_emoji <-  gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", corpus_en_Neither_emoji) 
+corpus_en_Neither_emoji <- Corpus(VectorSource(corpus_en_Neither_emoji))
+##convert text to lowercase
+corpus_en_Neither_emoji <- tm_map(corpus_en_Neither_emoji,tolower)
+#inspect(corpus[1:5])
+##remove punctuations from text
+corpus_en_Neither_emoji <- tm_map(corpus_en_Neither_emoji,removePunctuation)
+##remove numbers from text
+corpus_en_Neither_emoji <- tm_map(corpus_en_Neither_emoji,removeNumbers)
+#inspect(corpus[1:5])
+##remove stopwords from french language 
+##corpus_USA_en_emoji <- tm_map(corpus_USA_en_emoji,removeWords,stopwords("en"))
+##remove url from text
+removeURL <- function(x) gsub("http[[:alnum:]]*",'',x)
+corpus_en_Neither_emoji <- tm_map(corpus_en_Neither_emoji,content_transformer(removeURL))
+#inspect(cleaned_corpus[1:5])
+##remove emoticons
+removeEmoticons <- function(x) gsub("(?::|;|=)(?:-)?(?:\\)|\\(|D|P)",'',x)
+cleaned_corpus_en_Neither_emoji <- tm_map(corpus_en_Neither_emoji,content_transformer(removeEmoticons))
+   
+##remove white space
+cleaned_corpus_en_Neither_emoji <- tm_map(cleaned_corpus_en_Neither_emoji,stripWhitespace)
+###
+cleaned_corpus_en_Neither_emoji <- tm_map(cleaned_corpus_en_Neither_emoji,removeWords,c('paris'))
+cleaned_corpus_en_Neither_emoji <- tm_map(cleaned_corpus_en_Neither_emoji,stripWhitespace)
+##average word length before stemming
+# split words
+words_list = strsplit(cleaned_corpus_en_Neither_emoji$content," ")
+wsize_per_tweet = sapply(words_list, function(x) mean(nchar(x)))
+avg_word_len = mean(wsize_per_tweet,na.rm=TRUE)
+avg_word_len
+##Stemming
+cleaned_corpus_en_Neither_emoji <- tm_map(cleaned_corpus_en_Neither_emoji,stemDocument)
+cleaned_corpus_en_Neither_emoji <- tm_map(cleaned_corpus_en_Neither_emoji,stripWhitespace)
+##avg tweet length
+avg_tweet_len <- mean(sapply(cleaned_corpus_en_Neither_emoji,function(x)length(unlist(gregexpr(" ",x)))+1))
+avg_tweet_len
+length(cleaned_corpus_en_Neither_emoji)
+#inspect(cleaned_corpus_en_emoji[1:25])
+```
+
+```{r}
+tdm <- TermDocumentMatrix(cleaned_corpus_en_Neither_emoji)
+#tdm <- as.matrix(tdm)
+#print(tdm[1:10,1:20])
+#tdm
+#tdm <- as.matrix(tdm)
+freqSum_en_Neither_emoji <- slam::row_sums(tdm, na.rm = T)
+#apply(tdm, 1, sum)
+#freqSum_USA_en <- rowSums(tdm)
+#freqSum_France_fr 
+H=Shannon(freqSum_en_Neither_emoji)/log(2)
+H
+```
+
+```{r}
+library("iNEXT")
+var<-ChaoShannon(freqSum_en_Neither_emoji, datatype = "abundance", conf = 0.95)/log(2)
+```
+
+```{r}
+var
+```
+
+##Word cloud
+
+## I
+```{r}
+library(tm)
+#Create a vector containing only the text
+text <- I_full$text
+
+# Create a corpus  
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+```
+
+
+```{r}
+dtm.new<-removeSparseTerms(dtm, sparse=0.99)
+```
+
+```{r}
+
+matrix <- as.matrix(dtm.new) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+df <- data.frame(word = names(words),freq=words)
+```
+
+
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+
+set.seed(1234) # for reproducibility 
+wordcloud(words = df$word, freq = df$freq, min.freq = 1,           max.words=200, scale=c(2,.5), random.order=FALSE, rot.per=0.5,            colors=brewer.pal(8, "Dark2"))
+```
+
+
+## WE
+```{r}
+library(tm)
+#Create a vector containing only the text
+text <- We_full$text
+
+# Create a corpus  
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+
+```
+
+```{r}
+dtm.new<-removeSparseTerms(dtm, sparse=0.99)
+```
+
+```{r}
+
+matrix <- as.matrix(dtm.new) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+df <- data.frame(word = names(words),freq=words)
+```
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+
+set.seed(1234) # for reproducibility 
+wordcloud(words = df$word, freq = df$freq, min.freq = 1,           max.words=200, scale=c(2,.5), random.order=FALSE, rot.per=0.35,            colors=brewer.pal(8, "Dark2"))
+```
+
+## Neither
+```{r}
+library(tm)
+#Create a vector containing only the text
+text <- Neither_full$text
+
+# Create a corpus  
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+
+
+```
+
+```{r}
+dtm.new<-removeSparseTerms(dtm, sparse=0.99)
+```
+
+```{r}
+
+matrix <- as.matrix(dtm.new) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+df <- data.frame(word = names(words),freq=words)
+```
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+
+set.seed(1234) # for reproducibility 
+wordcloud(words = df$word, freq = df$freq, min.freq = 1,           max.words=100, scale=c(2,.5), random.order=FALSE, rot.per=0.35,            colors=brewer.pal(8, "Dark2"))
+```

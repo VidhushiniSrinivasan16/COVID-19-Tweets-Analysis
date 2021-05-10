@@ -1,0 +1,69 @@
+```{r}
+options(stringsAsFactors = FALSE)
+Sys.setlocale(category = "LC_ALL", locale = "en_US.UTF-8")
+```
+
+```{r}
+#rm(data,data_non_solidarity,data_solidarity,emDict_raw)
+rm(list = ls()) 
+#install.packages("slam")
+library(slam)
+library(textcat)
+#library(cldr)
+library(entropart)
+library(boot)
+library(vegan)
+library(simboot)
+#update.packages()
+library(tidyverse)
+#library(tokenizers)
+library(mgcv)
+library(twitteR)
+library(plyr)
+library(dplyr)
+library(ROAuth)
+library(stringr)
+library(ggplot2)
+library(httr)
+library(wordcloud)
+library(stringi)
+#library(sentiment)
+library(SnowballC)
+library(tm)
+library(RColorBrewer)
+```
+
+
+```{r}
+data_covid_filtered <- read.csv("covid-original.csv")
+```
+
+```{r}
+head(data_covid_filtered,5)
+```
+
+````{r}
+data_covid_bin <- 
+  data_covid_filtered %>% dplyr::mutate(text=iconv(text, from = "latin1", to = "ascii", sub = "byte"))%>%dplyr::mutate(month=strftime(as.Date(created_at, "%a %b %d %H:%M:%S %z %Y"), "%b"))
+````
+
+```{r}
+tail(data_covid_bin,100)
+```
+
+```{r}
+data_jan = data_covid_bin %>% dplyr::filter(month=="Jan")
+data_feb = data_covid_bin %>% dplyr::filter(month=="Feb")
+data_march= data_covid_bin %>% dplyr::filter(month=="Mar")
+```
+
+```{r}
+write.csv(data_jan,"covid-jan.csv")
+write.csv(data_jan,"covid-feb.csv")
+write.csv(data_jan,"covid-march.csv")
+```
+
+
+```{r}
+data_jan <- read.csv("covid-jan.csv")
+```
